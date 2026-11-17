@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interval Ledger</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Interval Ledger</h1>
+        <p>Run-length observations, exact integrals, auditable revisions</p>
+      </div>
+    </div>
+    <div class="topbar-controls">
+      <label class="field inline">
+        <span>Source</span>
+        <select id="source-select" aria-label="Observation source"></select>
+      </label>
+      <span class="badge" id="head-badge">head —</span>
+      <span class="badge" id="draft-pill" hidden>draft</span>
+      <a class="ghost link-button" href="#ledger-panel">Ledger</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <p class="source-meta" id="source-meta"></p>
+
+    <section class="toolbar" aria-label="Query window">
+      <div class="toolbar-group">
+        <label class="field">
+          <span>From tick</span>
+          <input id="lo-input" type="number" min="0" step="1" value="0" />
+        </label>
+        <label class="field">
+          <span>To tick <em>(exclusive)</em></span>
+          <input id="hi-input" type="number" min="1" step="1" value="480" />
+        </label>
+        <label class="field">
+          <span>Granularity</span>
+          <select id="granularity">
+            <option value="1">1 tick (1 min)</option>
+            <option value="5" selected>5 ticks</option>
+            <option value="15">15 ticks</option>
+            <option value="60">60 ticks (1 h)</option>
+          </select>
+        </label>
+        <button id="apply-window" class="primary">Apply</button>
+      </div>
+      <div class="toolbar-group presets" role="group" aria-label="Window presets">
+        <button class="ghost" id="preset-2h">2 h</button>
+        <button class="ghost" id="preset-4h">4 h</button>
+        <button class="ghost" id="preset-all">Full extent</button>
+        <label class="toggle inline">
+          <input type="checkbox" id="revoked-toggle" />
+          <span>Show revoked revisions as applied</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="kpis" aria-label="Window summary">
+      <article class="kpi">
+        <span class="kpi-label">Integral</span>
+        <span class="kpi-value" id="kpi-total">—</span>
+        <span class="kpi-note" id="kpi-total-note">—</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Coverage</span>
+        <span class="kpi-value" id="kpi-covered">—</span>
+        <span class="kpi-note" id="kpi-covered-note">—</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Runs scanned</span>
+        <span class="kpi-value" id="kpi-segments">—</span>
+        <span class="kpi-note" id="kpi-segments-note">—</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi-label">Revoked revisions</span>
+        <span class="kpi-value" id="kpi-revoked">0</span>
+        <span class="kpi-note" id="kpi-revoked-note">—</span>
+      </article>
+    </section>
+
+    <section class="card chart-card">
+      <header class="card-head">
+        <div>
+          <h2>Integral per bucket</h2>
+          <p>Sum of value × ticks. Fainter bars cover fewer ticks than the bucket holds, so a quiet source never reads as a zero.</p>
+        </div>
+      </header>
+      <div class="chart-wrap">
+        <div id="chart" class="chart"></div>
+        <div id="chart-tip" class="chart-tip" hidden></div>
+      </div>
+      <div id="coverage" class="coverage"></div>
+    </section>
+
+    <div class="two-col">
+      <section class="card" id="editor-card">
+        <header class="card-head">
+          <div>
+            <h2>Revise a span</h2>
+            <p>Half-open <span class="mono">[start, end)</span>. Only that span is rewritten; both residues survive.</p>
+          </div>
+        </header>
+        <div id="restore-banner" class="restore-banner" hidden>
+          <span id="restore-text"></span>
+          <button class="link" id="banner-discard" type="button">discard restored draft</button>
+        </div>
+        <div class="editor">
+          <fieldset class="segmented">
+            <legend>Span entry</legend>
+            <label><input type="radio" name="span-mode" value="ticks" checked /> Ticks</label>
+            <label><input type="radio" name="span-mode" value="clock" /> Clock (HH:MM)</label>
+          </fieldset>
+          <div id="ticks-fields" class="field-row">
+            <label class="field"><span>Start tick</span><input id="start-tick" type="number" min="0" step="1" value="52" /></label>
+            <label class="field"><span>End tick</span><input id="end-tick" type="number" min="1" step="1" value="71" /></label>
+          </div>
+          <div id="clock-fields" class="field-row" hidden>
+            <label class="field"><span>Start</span><input id="clock-start" type="time" value="00:52" /></label>
+            <label class="field"><span>End</span><input id="clock-end" type="time" value="01:11" /></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>New value</span><input id="rev-value" type="number" min="0" max="999999" step="1" value="6" /></label>
+            <label class="field grow"><span>Note</span><input id="rev-note" type="text" maxlength="500" placeholder="why this span changes" /></label>
+          </div>
+          <div class="editor-actions">
+            <button id="preview-button" class="primary">Preview impact</button>
+            <button id="commit-button" disabled>Commit revision</button>
+            <button id="discard-button" class="ghost" disabled>Discard draft</button>
+            <span class="muted small" id="preview-status"></span>
+          </div>
+        </div>
+        <div id="impact-empty" class="empty">Preview shows residues, replaced runs, and the exact integral delta before anything is written.</div>
+        <div id="impact" class="impact"></div>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <div>
+            <h2>Cost of the query shape</h2>
+            <p>Same answer, two strategies. Choose by window width and update rate, not by habit.</p>
+          </div>
+          <span id="cost-match" class="small"></span>
+        </header>
+        <table class="cost-table">
+          <thead>
+            <tr><th>Path</th><th class="num">Runs scanned</th><th class="num">Rows</th><th class="num">Memory</th><th class="num">Time</th></tr>
+          </thead>
+          <tbody id="cost-rows"></tbody>
+        </table>
+        <p class="muted small" id="cost-note"></p>
+        <div class="verify">
+          <div class="verify-actions">
+            <button id="verify-button" class="ghost">Run pointwise check (first 240 ticks)</button>
+          </div>
+          <div id="verify-result"></div>
+        </div>
+        <div class="decision">
+          <h3>Choosing a representation</h3>
+          <dl>
+            <dt>Keep runs compressed</dt>
+            <dd>Integrals and bucket rollups are exact at any granularity. Cost scales with runs, so long constant stretches are nearly free. Best default; the residue bookkeeping costs one extra segment per re-cut.</dd>
+            <dt>Expand to fixed granularity</dt>
+            <dd>Needed only when a downstream tool demands dense rows. Cost scales with window width, which is fine for a 2-hour look and painful for a month. Store the expansion as a derived cache, never as the source of truth.</dd>
+            <dt>Revoked revisions</dt>
+            <dd>Replay skips revoked entries; the prior residues reappear exactly, with no compensating negative rows. A revoked revision still occupies a ledger position, so audit stays linear.</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" id="audit-panel" hidden></section>
+
+    <div class="two-col">
+      <section class="card">
+        <header class="card-head">
+          <div>
+            <h2>Runs in the window</h2>
+            <p>Each row is a merged segment with the entry that last wrote it.</p>
+          </div>
+        </header>
+        <div class="table-scroll">
+          <table class="seg-table">
+            <thead><tr><th class="num">Start</th><th class="num">End</th><th class="num">Ticks</th><th class="num">Value</th><th class="num">Partial</th><th>Owner</th></tr></thead>
+            <tbody id="segment-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" id="ledger-panel">
+        <header class="card-head">
+          <div>
+            <h2>Ledger</h2>
+            <p>Append-only. Newest first. Revoking is itself an entry.</p>
+          </div>
+          <button id="restore-draft" class="ghost">Restore saved draft</button>
+        </header>
+        <ol id="ledger" class="ledger"></ol>
+      </section>
+    </div>
+  </main>
+
+  </div>
+  <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
